@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Chat Demo - HTML</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 600px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 24px;
+        margin-bottom: 10px;
+      }
+
+      .status {
+        display: inline-block;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 14px;
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .status.connected {
+        background: rgba(76, 175, 80, 0.8);
+      }
+
+      .status.disconnected {
+        background: rgba(244, 67, 54, 0.8);
+      }
+
+      .connection-form {
+        padding: 20px;
+        background: #f5f5f5;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      .form-group:last-child {
+        margin-bottom: 0;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #333;
+      }
+
+      input[type='text'] {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+
+      input[type='text']:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: #667eea;
+        color: white;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: #5568d3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-danger {
+        background: #f44336;
+        color: white;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        background: #d32f2f;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .chat-container {
+        height: 400px;
+        overflow-y: auto;
+        padding: 20px;
+        background: #fafafa;
+      }
+
+      .message {
+        margin-bottom: 15px;
+        animation: slideIn 0.3s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .message-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+
+      .message-user {
+        font-weight: 600;
+        color: #667eea;
+        margin-right: 10px;
+      }
+
+      .message-time {
+        font-size: 12px;
+        color: #999;
+      }
+
+      .message-content {
+        background: white;
+        padding: 12px;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        word-wrap: break-word;
+      }
+
+      .message.own .message-content {
+        background: #667eea;
+        color: white;
+      }
+
+      .message.own .message-user {
+        color: #764ba2;
+      }
+
+      .message.system {
+        text-align: center;
+      }
+
+      .message.system .message-content {
+        background: #e3f2fd;
+        color: #1976d2;
+        display: inline-block;
+        font-size: 13px;
+      }
+
+      .input-container {
+        padding: 20px;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+      }
+
+      .input-group {
+        display: flex;
+        gap: 10px;
+      }
+
+      .input-group input {
+        flex: 1;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+      }
+
+      .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 10px;
+      }
+
+      /* 滚动条样式 */
+      .chat-container::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .chat-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+
+      .chat-container::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 3px;
+      }
+
+      .chat-container::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>💬 WebSocket 聊天室</h1>
+        <div class="status" id="status">未连接</div>
+      </div>
+
+      <div class="connection-form" id="connectionForm">
+        <div class="form-group">
+          <label for="wsUrl">WebSocket URL:</label>
+          <input
+            type="text"
+            id="wsUrl"
+            value="wss://echo.websocket.org"
+            placeholder="wss://your-websocket-server.com"
+          />
+        </div>
+        <div class="form-group">
+          <label for="username">用户名:</label>
+          <input
+            type="text"
+            id="username"
+            value="User"
+            placeholder="请输入用户名"
+          />
+        </div>
+        <div class="form-group">
+          <button class="btn btn-primary" id="connectBtn" onclick="connect()">
+            连接
+          </button>
+          <button
+            class="btn btn-danger"
+            id="disconnectBtn"
+            onclick="disconnect()"
+            disabled
+          >
+            断开
+          </button>
+        </div>
+      </div>
+
+      <div class="chat-container" id="chatContainer">
+        <div class="empty-state">
+          <div class="empty-state-icon">💭</div>
+          <div>连接到服务器后开始聊天</div>
+        </div>
+      </div>
+
+      <div class="input-container">
+        <div class="input-group">
+          <input
+            type="text"
+            id="messageInput"
+            placeholder="输入消息..."
+            disabled
+            onkeypress="handleKeyPress(event)"
+          />
+          <button
+            class="btn btn-primary"
+            id="sendBtn"
+            onclick="sendMessage()"
+            disabled
+          >
+            发送
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 引入打包后的 UMD 文件 -->
+    <script src="../../dist/core/index.umd.js"></script>
+
+    <script>
+      // 获取 DOM 元素
+      const statusEl = document.getElementById('status')
+      const connectBtn = document.getElementById('connectBtn')
+      const disconnectBtn = document.getElementById('disconnectBtn')
+      const messageInput = document.getElementById('messageInput')
+      const sendBtn = document.getElementById('sendBtn')
+      const chatContainer = document.getElementById('chatContainer')
+      const wsUrlInput = document.getElementById('wsUrl')
+      const usernameInput = document.getElementById('username')
+
+      // 使用 UMD 全局变量
+      const { WebSocketClient } = WebSocketCore
+
+      let client = null
+      let username = 'User'
+      let messages = []
+      let lastSentMessage = null // 记录最后发送的消息，用于去重
+
+      // 连接
+      function connect() {
+        const url = wsUrlInput.value.trim()
+        username = usernameInput.value.trim() || 'User'
+
+        if (!url) {
+          alert('请输入 WebSocket URL')
+          return
+        }
+
+        // 如果已经连接，先断开
+        if (client) {
+          disconnect()
+        }
+
+        // 清空消息列表
+        messages = []
+        renderMessages()
+
+        try {
+          // 创建客户端
+          // echo.websocket.org 是一个简单的 echo 服务器，会回显所有发送的消息
+          // 它不支持 ping/pong 协议，所以需要禁用心跳和 pong 超时检查
+          client = new WebSocketClient({
+            url: url,
+            heartbeatInterval: false, // 禁用心跳（echo 服务器不支持）
+            pongTimeout: false, // 禁用 pong 超时检查
+            reconnectDelay: 1000,
+            maxReconnectDelay: 30000,
+            strictJsonMode: false, // 允许非 JSON 消息
+            messageParser: data => {
+              // 如果是字符串
+              if (typeof data === 'string') {
+                // 尝试解析 JSON
+                try {
+                  const parsed = JSON.parse(data)
+
+                  // 过滤掉订阅/取消订阅的控制消息
+                  // 这些是库内部发送的消息，不应该显示给用户
+                  // 通过返回一个以 __ 开头的特殊 channel，在 handleMessage 中会被过滤
+                  if (
+                    parsed &&
+                    typeof parsed === 'object' &&
+                    !Array.isArray(parsed) &&
+                    (parsed.action === 'subscribe' ||
+                      parsed.action === 'unsubscribe') &&
+                    parsed.channel
+                  ) {
+                    // 返回一个特殊的 channel（以 __ 开头），会被 handleMessage 过滤
+                    return {
+                      channel: '__ignore__',
+                      data: parsed
+                    }
+                  }
+
+                  // 检查是否是标准消息格式 { channel, data }
+                  if ('channel' in parsed) {
+                    return parsed
+                  }
+
+                  // 如果是 JSON 但不是标准格式，包装它
+                  return {
+                    channel: 'message',
+                    data: parsed
+                  }
+                } catch {
+                  // 不是 JSON，作为纯文本处理
+                  return {
+                    channel: 'message',
+                    data: data
+                  }
+                }
+              }
+
+              // 处理二进制数据（ArrayBuffer 或 Blob）
+              return {
+                channel: 'binary',
+                data: data
+              }
+            }
+          })
+
+          // 监听连接状态
+          client.onConnectionStateChange(connected => {
+            updateConnectionStatus(connected)
+          })
+
+          // 订阅消息（echo 服务器会回显所有消息）
+          client.subscribe('message', data => {
+            // echo.websocket.org 返回纯文本字符串
+            const content =
+              typeof data === 'string' ? data : JSON.stringify(data)
+
+            // 如果这是刚才发送的消息的回显，不重复显示
+            // echo 服务器会原样回显，所以可以通过内容匹配来判断
+            if (lastSentMessage && lastSentMessage === content) {
+              lastSentMessage = null // 清除标记
+              return // 不显示回显，因为已经在发送时显示了
+            }
+
+            // 显示服务器回显的消息
+            addMessage({
+              user: 'Echo',
+              content: content,
+              time: new Date(),
+              isOwn: false
+            })
+          })
+
+          // 连接
+          client.connect()
+
+          // 添加系统消息
+          addSystemMessage('正在连接...')
+        } catch (error) {
+          console.error('连接失败:', error)
+          alert('连接失败: ' + error.message)
+        }
+      }
+
+      // 断开连接
+      function disconnect() {
+        if (client) {
+          client.disconnect()
+          client = null
+          messages = [] // 清空消息列表
+          lastSentMessage = null // 清除发送消息标记
+          renderMessages() // 重新渲染
+          addSystemMessage('已断开连接')
+        }
+      }
+
+      // 发送消息
+      function sendMessage() {
+        const content = messageInput.value.trim()
+
+        if (!content) return
+        if (!client || !client.isConnected()) {
+          alert('请先连接到服务器')
+          return
+        }
+
+        try {
+          // 记录发送的消息，用于去重
+          lastSentMessage = content
+
+          // 发送消息到服务器
+          // echo.websocket.org 会原样回显发送的消息
+          client.send(content)
+
+          // 添加自己的消息到列表（立即显示，不等服务器回显）
+          addMessage({
+            user: username,
+            content: content,
+            time: new Date(),
+            isOwn: true
+          })
+
+          // 清空输入框
+          messageInput.value = ''
+        } catch (error) {
+          console.error('发送消息失败:', error)
+          alert('发送消息失败: ' + error.message)
+          lastSentMessage = null // 清除标记
+        }
+      }
+
+      // 处理回车键
+      function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+          sendMessage()
+        }
+      }
+
+      // 更新连接状态
+      function updateConnectionStatus(connected) {
+        if (connected) {
+          statusEl.textContent = '已连接'
+          statusEl.className = 'status connected'
+          connectBtn.disabled = true
+          disconnectBtn.disabled = false
+          messageInput.disabled = false
+          sendBtn.disabled = false
+          addSystemMessage('连接成功！')
+        } else {
+          statusEl.textContent = '未连接'
+          statusEl.className = 'status disconnected'
+          connectBtn.disabled = false
+          disconnectBtn.disabled = true
+          messageInput.disabled = true
+          sendBtn.disabled = true
+        }
+      }
+
+      // 添加消息
+      function addMessage(message) {
+        messages.push(message)
+        renderMessages()
+      }
+
+      // 添加系统消息
+      function addSystemMessage(content) {
+        messages.push({
+          type: 'system',
+          content: content,
+          time: new Date()
+        })
+        renderMessages()
+      }
+
+      // 渲染消息列表
+      function renderMessages() {
+        if (messages.length === 0) {
+          chatContainer.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">💭</div>
+              <div>还没有消息</div>
+            </div>
+          `
+          return
+        }
+
+        chatContainer.innerHTML = messages
+          .map(msg => {
+            if (msg.type === 'system') {
+              return `
+              <div class="message system">
+                <div class="message-content">${escapeHtml(msg.content)}</div>
+              </div>
+            `
+            }
+
+            const time = formatTime(msg.time)
+            const ownClass = msg.isOwn ? 'own' : ''
+
+            return `
+            <div class="message ${ownClass}">
+              <div class="message-header">
+                <span class="message-user">${escapeHtml(msg.user)}</span>
+                <span class="message-time">${time}</span>
+              </div>
+              <div class="message-content">${escapeHtml(msg.content)}</div>
+            </div>
+          `
+          })
+          .join('')
+
+        // 滚动到底部
+        chatContainer.scrollTop = chatContainer.scrollHeight
+      }
+
+      // 格式化时间
+      function formatTime(date) {
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        return `${hours}:${minutes}`
+      }
+
+      // 转义 HTML
+      function escapeHtml(text) {
+        const div = document.createElement('div')
+        div.textContent = text
+        return div.innerHTML
+      }
+
+      // 页面加载完成后初始化
+      window.addEventListener('load', () => {
+        console.log('WebSocket Client Demo loaded')
+        console.log('Available:', typeof WebSocketCore !== 'undefined')
+      })
+
+      // 页面关闭前断开连接
+      window.addEventListener('beforeunload', () => {
+        if (client) {
+          client.disconnect()
+        }
+      })
+    </script>
+  </body>
+</html>

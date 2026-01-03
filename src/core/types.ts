@@ -23,16 +23,29 @@ export type ConnectionStateListener = (connected: boolean) => void;
 export interface WSConfig {
   /** WebSocket 服务器 URL */
   url: string;
-  /** 心跳间隔（毫秒），默认 30000 */
-  heartbeatInterval?: number;
-  /** Pong 响应超时时间（毫秒），默认 10000 */
-  pongTimeout?: number;
+  /** 心跳间隔（毫秒），默认 30000，设置为 0 或 false 可禁用心跳 */
+  heartbeatInterval?: number | false;
+  /** Pong 响应超时时间（毫秒），默认 10000，设置为 0 或 false 可禁用 pong 超时检查 */
+  pongTimeout?: number | false;
   /** 初始重连延迟（毫秒），默认 1000 */
   reconnectDelay?: number;
   /** 最大重连延迟（毫秒），默认 30000 */
   maxReconnectDelay?: number;
   /** 重连延迟增长因子，默认 1.5 */
   reconnectDecayFactor?: number;
+  // 新增：自定义消息解析器
+  messageParser?: (
+    data: string | ArrayBuffer | Blob
+  ) => WSMessage | Promise<WSMessage>;
+
+  // 新增：严格 JSON 模式
+  strictJsonMode?: boolean;
+  /** 自定义心跳消息，可以是字符串、对象或函数。默认: { action: "subscribe", channel: "ping" } */
+  heartbeatMessage?: string | object | (() => string | object);
+  /** 自定义 pong 检测函数，返回 true 表示收到 pong 响应。默认检测 channel === "pong" */
+  isPongMessage?: (message: WSMessage) => boolean;
+  /** 是否使用 WebSocket 原生 ping（如果浏览器支持），默认 false */
+  useNativePing?: boolean;
 }
 
 /**

@@ -23,6 +23,16 @@
 ### ✅ 框架无关 - 核心层可用于任何框架
 核心层（Core Layer）完全独立，不依赖任何框架，可以在任何 JavaScript/TypeScript 项目中使用。
 
+### ✅ 灵活的消息处理
+- **自定义消息解析器**：支持自定义消息解析逻辑，适配各种消息格式（JSON、纯文本、二进制）
+- **非 JSON 消息支持**：可配置严格模式，支持处理纯文本和二进制消息
+- **特殊消息过滤**：自动过滤以 `__` 开头的内部消息 channel
+
+### ✅ 自定义心跳机制
+- **自定义心跳格式**：支持字符串、对象或函数形式的心跳消息
+- **自定义 pong 检测**：可自定义 pong 响应检测逻辑
+- **灵活配置**：支持禁用心跳和 pong 超时检查，适配不同服务器协议（如 echo.websocket.org、OKX 等）
+
 ## 📁 目录结构
 
 ```
@@ -121,6 +131,11 @@ const unsubscribe = client.subscribe('market.btc', (data) => {
 
 // 取消订阅
 unsubscribe();
+
+// 发送消息
+client.send({ type: 'message', content: 'Hello' });
+client.send('Hello World'); // 字符串
+client.send(buffer); // ArrayBuffer
 
 // 监听连接状态
 client.onConnectionStateChange((connected) => {
@@ -227,7 +242,7 @@ function MarketComponent() {
 | **类型安全** | - | ✅ TypeScript 编译检查<br>✅ 所有文件通过类型检查 | ✅ 已覆盖 |
 | **框架无关** | `WebSocketClient.test.ts` | ✅ 核心层独立测试<br>✅ 不依赖任何框架 | ✅ 已覆盖 |
 
-**测试统计**：6 个测试文件，75 个测试用例，全部通过 ✅
+**测试统计**：6 个测试文件，78+ 个测试用例，全部通过 ✅
 
 ### 运行测试
 
@@ -275,6 +290,24 @@ npm test
 - `@rectmoon/websocket-client/vue` - Vue 适配层
 - `@rectmoon/websocket-client/store` - Store 层（Zustand 集成）
 
+## 📚 示例
+
+项目提供了多个示例文件，位于 `examples/` 目录：
+
+- **chat.html** - WebSocket 聊天室示例（对接 echo.websocket.org）
+  - 演示如何处理非 JSON 消息
+  - 展示如何禁用心跳和 pong 超时检查
+  - 自定义消息解析器示例
+
+- **okx-market.html** - OKX 公共行情 WebSocket 示例
+  - 演示如何对接第三方 WebSocket API（OKX）
+  - 自定义消息解析器处理 OKX 消息格式
+  - 实时行情数据显示
+
+- **logs.html** - WebSocket 连接日志示例
+  - 展示连接状态监控
+  - 消息日志记录功能
+
 ## 📝 配置选项
 
 ### WSConfig
@@ -282,12 +315,86 @@ npm test
 ```typescript
 interface WSConfig {
   url: string;                      // WebSocket 服务器 URL
-  heartbeatInterval?: number;       // 心跳间隔（毫秒），默认 30000
-  pongTimeout?: number;             // Pong 响应超时（毫秒），默认 10000
-  reconnectDelay?: number;          // 初始重连延迟（毫秒），默认 1000
+  heartbeatInterval?: number | false; // 心跳间隔（毫秒），默认 30000，设置为 false 或 0 可禁用心跳
+  pongTimeout?: number | false;     // Pong 响应超时（毫秒），默认 10000，设置为 false 或 0 可禁用超时检查
+  reconnectDelay?: number;           // 初始重连延迟（毫秒），默认 1000
   maxReconnectDelay?: number;       // 最大重连延迟（毫秒），默认 30000
   reconnectDecayFactor?: number;    // 重连延迟增长因子，默认 1.5（指数退避）
+  
+  // 消息处理
+  messageParser?: (data: string | ArrayBuffer | Blob) => WSMessage | Promise<WSMessage>; // 自定义消息解析器
+  strictJsonMode?: boolean;         // 严格 JSON 模式，默认 true（非 JSON 消息会抛出错误）
+  
+  // 自定义心跳
+  heartbeatMessage?: string | object | (() => string | object); // 自定义心跳消息格式
+  isPongMessage?: (message: WSMessage) => boolean; // 自定义 pong 检测函数
+  useNativePing?: boolean;          // 是否使用 WebSocket 原生 ping（如果浏览器支持），默认 false
 }
+```
+
+### 高级配置示例
+
+#### 自定义心跳格式
+
+```typescript
+const client = new WebSocketClient({
+  url: 'wss://api.example.com/ws',
+  heartbeatInterval: 30000,
+  heartbeatMessage: 'PING', // 字符串格式
+  // 或
+  heartbeatMessage: { type: 'heartbeat' }, // 对象格式
+  // 或
+  heartbeatMessage: () => `ping-${Date.now()}`, // 函数格式
+  isPongMessage: (message) => message.data === 'PONG' // 自定义 pong 检测
+});
+```
+
+#### 禁用心跳（适用于不支持 ping/pong 的服务器）
+
+```typescript
+const client = new WebSocketClient({
+  url: 'wss://echo.websocket.org',
+  heartbeatInterval: false, // 禁用心跳
+  pongTimeout: false, // 禁用 pong 超时检查
+  strictJsonMode: false // 允许非 JSON 消息
+});
+```
+
+#### 自定义消息解析器
+
+```typescript
+const client = new WebSocketClient({
+  url: 'wss://api.example.com/ws',
+  messageParser: (data) => {
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        // 自定义解析逻辑
+        if (parsed.type === 'custom') {
+          return { channel: 'custom', data: parsed };
+        }
+        return { channel: 'message', data: parsed };
+      } catch {
+        return { channel: 'message', data: data };
+      }
+    }
+    return { channel: 'binary', data: data };
+  }
+});
+```
+
+#### 发送消息
+
+```typescript
+// 发送字符串
+client.send('Hello World');
+
+// 发送对象（会自动 JSON.stringify）
+client.send({ type: 'message', content: 'Hello' });
+
+// 发送 ArrayBuffer
+const buffer = new ArrayBuffer(8);
+client.send(buffer);
 ```
 
 ## 📄 许可证

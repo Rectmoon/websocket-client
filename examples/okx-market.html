@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OKX 公共行情 WebSocket Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+      }
+
+      .header .subtitle {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+      .status {
+        display: inline-block;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        margin-top: 10px;
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .status.connected {
+        background: rgba(76, 175, 80, 0.9);
+      }
+
+      .status.disconnected {
+        background: rgba(244, 67, 54, 0.9);
+      }
+
+      .control-panel {
+        padding: 20px;
+        background: #f5f5f5;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      .form-group:last-child {
+        margin-bottom: 0;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #333;
+        font-size: 14px;
+      }
+
+      input[type='text'],
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+
+      input[type='text']:focus,
+      select:focus {
+        outline: none;
+        border-color: #2a5298;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: #2a5298;
+        color: white;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: #1e3c72;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(42, 82, 152, 0.4);
+      }
+
+      .btn-danger {
+        background: #f44336;
+        color: white;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        background: #d32f2f;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-group {
+        display: flex;
+        gap: 10px;
+      }
+
+      .data-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        padding: 20px;
+      }
+
+      @media (max-width: 768px) {
+        .data-container {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .data-panel {
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 20px;
+        min-height: 400px;
+      }
+
+      .data-panel h3 {
+        margin-bottom: 15px;
+        color: #333;
+        font-size: 18px;
+      }
+
+      .ticker-item {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .ticker-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .ticker-symbol {
+        font-weight: 600;
+        font-size: 16px;
+        color: #2a5298;
+      }
+
+      .ticker-price {
+        font-size: 20px;
+        font-weight: 700;
+        color: #333;
+      }
+
+      .ticker-price.up {
+        color: #4caf50;
+      }
+
+      .ticker-price.down {
+        color: #f44336;
+      }
+
+      .ticker-info {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        font-size: 13px;
+        color: #666;
+      }
+
+      .ticker-info-item {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .ticker-info-label {
+        color: #999;
+      }
+
+      .log-container {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 15px;
+        border-radius: 8px;
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+      }
+
+      .log-item {
+        margin-bottom: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .log-item:last-child {
+        border-bottom: none;
+      }
+
+      .log-time {
+        color: #858585;
+        margin-right: 8px;
+      }
+
+      .log-type {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        margin-right: 8px;
+        font-weight: 600;
+      }
+
+      .log-type.send {
+        background: #4caf50;
+        color: white;
+      }
+
+      .log-type.receive {
+        background: #2196f3;
+        color: white;
+      }
+
+      .log-type.error {
+        background: #f44336;
+        color: white;
+      }
+
+      .log-type.info {
+        background: #ff9800;
+        color: white;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+      }
+
+      .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 10px;
+      }
+
+      /* 滚动条样式 */
+      .log-container::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .log-container::-webkit-scrollbar-track {
+        background: #2a2a2a;
+      }
+
+      .log-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 3px;
+      }
+
+      .log-container::-webkit-scrollbar-thumb:hover {
+        background: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>📈 OKX 公共行情 WebSocket</h1>
+        <div class="subtitle">实时行情数据监控</div>
+        <div class="status" id="status">未连接</div>
+      </div>
+
+      <div class="control-panel">
+        <div class="form-group">
+          <label for="symbol">交易对:</label>
+          <select id="symbol">
+            <option value="BTC-USDT">BTC-USDT</option>
+            <option value="ETH-USDT">ETH-USDT</option>
+            <option value="BNB-USDT">BNB-USDT</option>
+            <option value="SOL-USDT">SOL-USDT</option>
+            <option value="DOGE-USDT">DOGE-USDT</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="btn-group">
+            <button class="btn btn-primary" id="connectBtn" onclick="connect()">
+              连接
+            </button>
+            <button
+              class="btn btn-danger"
+              id="disconnectBtn"
+              onclick="disconnect()"
+              disabled
+            >
+              断开
+            </button>
+            <button
+              class="btn btn-primary"
+              id="subscribeBtn"
+              onclick="subscribe()"
+              disabled
+            >
+              订阅行情
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="data-container">
+        <div class="data-panel">
+          <h3>📊 行情数据</h3>
+          <div id="tickerContainer">
+            <div class="empty-state">
+              <div class="empty-state-icon">📈</div>
+              <div>连接并订阅后显示行情数据</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="data-panel">
+          <h3>📝 消息日志</h3>
+          <div class="log-container" id="logContainer"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 引入打包后的 UMD 文件 -->
+    <script src="../../dist/core/index.umd.js"></script>
+
+    <script>
+      // 获取 DOM 元素
+      const statusEl = document.getElementById('status')
+      const connectBtn = document.getElementById('connectBtn')
+      const disconnectBtn = document.getElementById('disconnectBtn')
+      const subscribeBtn = document.getElementById('subscribeBtn')
+      const symbolSelect = document.getElementById('symbol')
+      const tickerContainer = document.getElementById('tickerContainer')
+      const logContainer = document.getElementById('logContainer')
+
+      // 使用 UMD 全局变量
+      const { WebSocketClient } = WebSocketCore
+
+      let client = null
+      let tickerData = {}
+
+      // 连接
+      function connect() {
+        if (client) {
+          disconnect()
+        }
+
+        try {
+          // 创建客户端
+          client = new WebSocketClient({
+            url: 'wss://ws.okx.com:8443/ws/v5/public',
+            heartbeatInterval: false, // OKX 有自己的心跳机制
+            pongTimeout: false,
+            reconnectDelay: 1000,
+            maxReconnectDelay: 30000,
+            strictJsonMode: false,
+            messageParser: data => {
+              // OKX 返回 JSON 格式的消息
+              if (typeof data === 'string') {
+                try {
+                  const parsed = JSON.parse(data)
+
+                  // OKX 消息格式可能是数组或对象
+                  if (Array.isArray(parsed)) {
+                    // 如果是数组，处理每个元素
+                    return {
+                      channel: 'okx_data',
+                      data: parsed
+                    }
+                  }
+
+                  // 如果是对象，检查是否是控制消息
+                  if (
+                    parsed.op &&
+                    (parsed.op === 'subscribe' || parsed.op === 'unsubscribe')
+                  ) {
+                    // 过滤掉订阅/取消订阅的控制消息
+                    return {
+                      channel: '__ignore__',
+                      data: parsed
+                    }
+                  }
+
+                  // 标准消息格式
+                  if (parsed.channel) {
+                    return {
+                      channel: parsed.channel,
+                      data: parsed
+                    }
+                  }
+
+                  // 其他消息包装为 okx_data
+                  return {
+                    channel: 'okx_data',
+                    data: parsed
+                  }
+                } catch {
+                  return {
+                    channel: 'message',
+                    data: data
+                  }
+                }
+              }
+
+              return {
+                channel: 'binary',
+                data: data
+              }
+            }
+          })
+
+          // 监听连接状态
+          client.onConnectionStateChange(connected => {
+            updateConnectionStatus(connected)
+          })
+
+          // 直接监听所有消息（不使用 subscribe，避免发送错误的订阅格式）
+          // OKX 使用自己的订阅格式 {"op": "subscribe", "args": [...]}
+          // 我们需要绕过 SubscriptionManager 的自动订阅功能
+          const wsManager = client['wsManager']
+          const messageRouter = client['messageRouter']
+
+          if (wsManager && messageRouter) {
+            // 直接通过 MessageRouter 注册回调，不触发自动订阅
+            // 这样不会发送 {"action":"subscribe","channel":"..."} 消息
+            messageRouter.register('okx_data', data => {
+              handleOKXData(data)
+            })
+
+            messageRouter.register('tickers', data => {
+              handleTickerData(data)
+            })
+
+            messageRouter.register('message', data => {
+              // 处理其他消息（可能是错误消息等）
+              handleOKXData(data)
+            })
+          }
+
+          // 连接
+          client.connect()
+          addLog('正在连接到 OKX WebSocket...', 'info')
+        } catch (error) {
+          console.error('连接失败:', error)
+          addLog('连接失败: ' + error.message, 'error')
+          alert('连接失败: ' + error.message)
+        }
+      }
+
+      // 断开连接
+      function disconnect() {
+        if (client) {
+          client.disconnect()
+          client = null
+          tickerData = {}
+          renderTickers()
+          addLog('已断开连接', 'info')
+        }
+      }
+
+      // 订阅行情
+      function subscribe() {
+        if (!client || !client.isConnected()) {
+          alert('请先连接到服务器')
+          return
+        }
+
+        const symbol = symbolSelect.value
+        const subscribeMsg = {
+          op: 'subscribe',
+          args: [
+            {
+              channel: 'tickers',
+              instId: symbol
+            }
+          ]
+        }
+
+        try {
+          client.send(subscribeMsg)
+          addLog(`订阅 ${symbol} 行情`, 'send', subscribeMsg)
+        } catch (error) {
+          console.error('订阅失败:', error)
+          addLog('订阅失败: ' + error.message, 'error')
+        }
+      }
+
+      // 处理 OKX 数据
+      function handleOKXData(data) {
+        // OKX 可能返回数组格式的数据
+        if (Array.isArray(data)) {
+          data.forEach(item => {
+            if (item.arg && item.arg.channel === 'tickers') {
+              handleTickerData(item)
+            }
+          })
+        } else if (data.arg && data.arg.channel === 'tickers') {
+          handleTickerData(data)
+        }
+      }
+
+      // 处理行情数据
+      function handleTickerData(data) {
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          const ticker = data.data[0]
+          const instId = ticker.instId || data.arg?.instId
+
+          if (instId) {
+            tickerData[instId] = {
+              ...ticker,
+              timestamp: Date.now()
+            }
+            renderTickers()
+            addLog(`收到 ${instId} 行情数据`, 'receive', ticker)
+          }
+        }
+      }
+
+      // 渲染行情数据
+      function renderTickers() {
+        const tickers = Object.values(tickerData)
+
+        if (tickers.length === 0) {
+          tickerContainer.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📈</div>
+              <div>暂无行情数据</div>
+            </div>
+          `
+          return
+        }
+
+        tickerContainer.innerHTML = tickers
+          .map(ticker => {
+            const instId = ticker.instId || 'N/A'
+            const last = parseFloat(ticker.last || ticker.lastPx || 0)
+            const open24h = parseFloat(ticker.open24h || ticker.sodUtc8 || 0)
+            const change24h =
+              open24h > 0
+                ? (((last - open24h) / open24h) * 100).toFixed(2)
+                : '0.00'
+            const changeClass = parseFloat(change24h) >= 0 ? 'up' : 'down'
+            const vol24h = parseFloat(
+              ticker.vol24h || ticker.volCcy24h || 0
+            ).toLocaleString()
+            const high24h = parseFloat(
+              ticker.high24h || ticker.high24h || 0
+            ).toLocaleString()
+            const low24h = parseFloat(
+              ticker.low24h || ticker.low24h || 0
+            ).toLocaleString()
+
+            return `
+              <div class="ticker-item">
+                <div class="ticker-header">
+                  <span class="ticker-symbol">${instId}</span>
+                  <span class="ticker-price ${changeClass}">${last.toLocaleString()}</span>
+                </div>
+                <div class="ticker-info">
+                  <div class="ticker-info-item">
+                    <span class="ticker-info-label">24h 涨跌:</span>
+                    <span class="${changeClass}">${change24h}%</span>
+                  </div>
+                  <div class="ticker-info-item">
+                    <span class="ticker-info-label">24h 成交量:</span>
+                    <span>${vol24h}</span>
+                  </div>
+                  <div class="ticker-info-item">
+                    <span class="ticker-info-label">24h 最高:</span>
+                    <span>${high24h}</span>
+                  </div>
+                  <div class="ticker-info-item">
+                    <span class="ticker-info-label">24h 最低:</span>
+                    <span>${low24h}</span>
+                  </div>
+                </div>
+              </div>
+            `
+          })
+          .join('')
+      }
+
+      // 更新连接状态
+      function updateConnectionStatus(connected) {
+        if (connected) {
+          statusEl.textContent = '已连接'
+          statusEl.className = 'status connected'
+          connectBtn.disabled = true
+          disconnectBtn.disabled = false
+          subscribeBtn.disabled = false
+          addLog('连接成功！', 'info')
+        } else {
+          statusEl.textContent = '未连接'
+          statusEl.className = 'status disconnected'
+          connectBtn.disabled = false
+          disconnectBtn.disabled = true
+          subscribeBtn.disabled = true
+        }
+      }
+
+      // 添加日志
+      function addLog(message, type = 'info', data = null) {
+        const time = new Date().toLocaleTimeString()
+        const logItem = document.createElement('div')
+        logItem.className = 'log-item'
+
+        let logContent = `<span class="log-time">${time}</span>`
+        logContent += `<span class="log-type ${type}">${type.toUpperCase()}</span>`
+        logContent += `<span>${message}</span>`
+
+        if (data) {
+          logContent += `<pre style="margin-top: 4px; font-size: 11px; color: #858585;">${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre>`
+        }
+
+        logItem.innerHTML = logContent
+        logContainer.appendChild(logItem)
+        logContainer.scrollTop = logContainer.scrollHeight
+      }
+
+      // 页面加载完成后初始化
+      window.addEventListener('load', () => {
+        console.log('OKX Market Demo loaded')
+        console.log('Available:', typeof WebSocketCore !== 'undefined')
+      })
+
+      // 页面关闭前断开连接
+      window.addEventListener('beforeunload', () => {
+        if (client) {
+          client.disconnect()
+        }
+      })
+    </script>
+  </body>
+</html>

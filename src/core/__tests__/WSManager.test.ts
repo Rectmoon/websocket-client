@@ -135,6 +135,9 @@ describe("WSManager", () => {
         ws.onmessage({
           data: JSON.stringify({ channel: "test", data: "message" }),
         });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
       }
 
       expect(messageHandler).toHaveBeenCalledWith({
@@ -143,19 +146,215 @@ describe("WSManager", () => {
       });
     });
 
-    it("应该处理无效的 JSON 消息", async () => {
+    it("应该处理非 JSON 格式的纯文本消息", async () => {
+      // 创建禁用严格 JSON 模式的 manager
+      const nonStrictManager = new WSManager({
+        url: mockUrl,
+        strictJsonMode: false,
+      });
+      const messageHandler = vi.fn();
+      nonStrictManager.onMessage(messageHandler);
+      nonStrictManager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (nonStrictManager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收纯文本消息（非 JSON）
+        ws.onmessage({ data: "Request se..." });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证消息被正确包装为 WSMessage 格式
+      expect(messageHandler).toHaveBeenCalledWith({
+        channel: "message",
+        data: "Request se...",
+      });
+
+      nonStrictManager.disconnect();
+    });
+
+    it("应该处理无效的 JSON 字符串而不抛出错误", async () => {
+      // 创建禁用严格 JSON 模式的 manager
+      const nonStrictManager = new WSManager({
+        url: mockUrl,
+        strictJsonMode: false,
+      });
+      const messageHandler = vi.fn();
       const consoleErrorSpy = vi.spyOn(console, "error");
+      nonStrictManager.onMessage(messageHandler);
+      nonStrictManager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (nonStrictManager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收无效 JSON 字符串
+        ws.onmessage({ data: "invalid json { broken" });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证消息被正确处理，不应该有错误日志
+      expect(messageHandler).toHaveBeenCalledWith({
+        channel: "message",
+        data: "invalid json { broken",
+      });
+      // 不应该有错误日志（因为现在会正确处理非 JSON 消息）
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
+      nonStrictManager.disconnect();
+    });
+
+    it("应该在严格 JSON 模式下对非 JSON 消息抛出错误", async () => {
+      // 使用默认的严格模式
+      const strictManager = new WSManager({ url: mockUrl });
+      const messageHandler = vi.fn();
+      const consoleErrorSpy = vi.spyOn(console, "error");
+      strictManager.onMessage(messageHandler);
+      strictManager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (strictManager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收非 JSON 消息
+        ws.onmessage({ data: "Request se..." });
+        // 等待异步处理完成
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证消息处理器没有被调用（因为抛出了错误）
+      expect(messageHandler).not.toHaveBeenCalled();
+      // 验证有错误日志
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
+      strictManager.disconnect();
+    });
+
+    it("应该处理 JSON 对象但没有 channel 字段的消息", async () => {
+      const messageHandler = vi.fn();
+      manager.onMessage(messageHandler);
       manager.connect();
       await Promise.resolve();
       await vi.runOnlyPendingTimersAsync();
 
       const ws = (manager as any).ws;
       if (ws && ws.onmessage) {
-        ws.onmessage({ data: "invalid json" });
+        // 模拟接收 JSON 对象但没有 channel 字段
+        ws.onmessage({
+          data: JSON.stringify({ data: "some data", other: "field" }),
+        });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
       }
 
-      expect(consoleErrorSpy).toHaveBeenCalled();
-      consoleErrorSpy.mockRestore();
+      // 验证消息被包装为 WSMessage 格式
+      expect(messageHandler).toHaveBeenCalledWith({
+        channel: "message",
+        data: { data: "some data", other: "field" },
+      });
+    });
+
+    it("应该处理二进制数据", async () => {
+      const messageHandler = vi.fn();
+      manager.onMessage(messageHandler);
+      manager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (manager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收二进制数据
+        const binaryData = new ArrayBuffer(8);
+        ws.onmessage({ data: binaryData });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证二进制数据被正确处理
+      expect(messageHandler).toHaveBeenCalled();
+      const callArgs = messageHandler.mock.calls[0][0];
+      expect(callArgs.channel).toBe("binary");
+      expect(callArgs.data).toBeInstanceOf(ArrayBuffer);
+    });
+
+    it("应该过滤掉以 __ 开头的特殊 channel 消息", async () => {
+      const messageHandler = vi.fn();
+      manager.onMessage(messageHandler);
+      manager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (manager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收以 __ 开头的特殊 channel 消息
+        ws.onmessage({
+          data: JSON.stringify({ channel: "__ignore__", data: "test" }),
+        });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证消息处理器没有被调用（消息被过滤）
+      expect(messageHandler).not.toHaveBeenCalled();
+    });
+
+    it("应该过滤掉以 __ 开头的其他特殊 channel 消息", async () => {
+      const messageHandler = vi.fn();
+      manager.onMessage(messageHandler);
+      manager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (manager as any).ws;
+      if (ws && ws.onmessage) {
+        // 测试不同的以 __ 开头的 channel
+        const specialChannels = ["__control__", "__internal__", "__system__"];
+
+        for (const channel of specialChannels) {
+          ws.onmessage({
+            data: JSON.stringify({ channel, data: "test" }),
+          });
+          await Promise.resolve();
+          await Promise.resolve();
+        }
+      }
+
+      // 验证消息处理器没有被调用（所有特殊消息都被过滤）
+      expect(messageHandler).not.toHaveBeenCalled();
+    });
+
+    it("应该正常处理不以 __ 开头的消息", async () => {
+      const messageHandler = vi.fn();
+      manager.onMessage(messageHandler);
+      manager.connect();
+      await Promise.resolve();
+      await vi.runOnlyPendingTimersAsync();
+
+      const ws = (manager as any).ws;
+      if (ws && ws.onmessage) {
+        // 模拟接收正常消息
+        ws.onmessage({
+          data: JSON.stringify({ channel: "normal", data: "test" }),
+        });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      // 验证消息处理器被正常调用
+      expect(messageHandler).toHaveBeenCalledWith({
+        channel: "normal",
+        data: "test",
+      });
     });
   });
 
@@ -186,6 +385,9 @@ describe("WSManager", () => {
         ws.onmessage({
           data: JSON.stringify({ channel: "pong", data: null }),
         });
+        // 等待异步处理完成（handleMessage 是 async 的）
+        await Promise.resolve();
+        await Promise.resolve();
       }
 
       // 验证 pong 超时被清除（通过检查没有错误）
@@ -306,4 +508,3 @@ describe("WSManager", () => {
     });
   });
 });
-

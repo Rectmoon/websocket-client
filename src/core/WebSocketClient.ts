@@ -36,4 +36,8 @@ export class WebSocketClient {
   onConnectionStateChange(listener: (connected: boolean) => void): Unsubscribe {
     return this.wsManager.onConnectionStateChange(listener);
   }
+
+  send(data: string | object | ArrayBuffer): void {
+    this.wsManager.sendRaw(data);
+  }
 }
